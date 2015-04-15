@@ -1,0 +1,37 @@
+#!/bin/bash
+# COMMAND: unx file
+
+## Exit with error if $1 is undefined or not a file.
+if [ -z "$1" ] ; then
+    echo "usage: $(basename "$0") path/to/file"
+    exit 1
+fi
+
+## Exit with error if $1 is not a simple file.
+if [ ! -f "$1" ] ; then
+    echo "$(basename "$0"): Not a file: $1"
+    exit 1
+fi
+
+exists() {
+    if command -v unrar > /dev/null 2>&1 ; then
+        return 0
+    else
+        echo "$(basename "$0"): I require '$1' to extract."
+        return 1
+    fi
+}
+
+case "$1" in
+    *.zip)      exists unzip || exit 1 ; unzip     "$1" -d "${1%.zip}"     ;;
+    *.rar)      exists unrar || exit 1 ; unrar x   "$1"    "${1%.rar}/"    ;;
+    *.tar.gz)   exists tar   || exit 1 ; tar -zxvf "$1" -C "${1%.tar.gz}"  ;;
+    *.tgz)      exists tar   || exit 1 ; tar -zxvf "$1" -C "${1%.tgz}"     ;;
+    *.tar.bz)   exists tar   || exit 1 ; tar -jxvf "$1" -C "${1%.tar.bz}"  ;;
+    *.tar.bz2)  exists tar   || exit 1 ; tar -jxvf "$1" -C "${1%.tar.bz2}" ;;
+    *.tbz2)     exists tar   || exit 1 ; tar -jxvf "$1" -C "${1%.tbz2}"    ;;
+    *.tbz)      exists tar   || exit 1 ; tar -jxvf "$1" -C "${1%.tbz}"     ;;
+    *.7z)       exists 7z    || exit 1 ; 7z x      "$1" -o"${1%.7z}"       ;;
+    *)          echo "Unrecognized file type: $1" 1>&2                     ;;
+esac
+

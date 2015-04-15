@@ -1,0 +1,47 @@
+#!/bin/bash
+
+usage()
+{
+    echo "Resolves a path into an absolute path relative to a base directory."
+    echo "Usage: `basename \"$0\"` path [base]"
+}
+
+if [ $# -eq 0 ] ; then
+    usage
+    exit 0
+fi
+
+# BASE - Base directory to resolve against.
+BASE="${2:-$(pwd)}"                     # default to current directory
+BASE=$(echo "$BASE" | sed 's/\/$//')    # strip trailing /
+
+# DIR - Directory to be resolved.
+# Prepend $BASE onto $DIR unless $DIR starts with /.
+DIR="$1"
+if [ "${1:0:1}" != "/" ]; then
+    DIR="$BASE/$1"
+fi
+
+resolve()
+{
+    pushd "$1" &> /dev/null
+    pwd
+    popd &> /dev/null
+}
+
+if [ -d "$DIR" ] ; then
+    # Change into $DIR, pwd, and get out.
+    DIR=$(resolve "$DIR")
+elif [ -f "$DIR" ] ; then
+    FILE=$(basename "$DIR") # extract file
+    DIR=$(dirname "$DIR")   # strip file
+    DIR=$(resolve "$DIR")   # resolve directory
+    DIR="$DIR/$FILE"        # reconstruct full path
+else
+    echo "$DIR is not a valid file or a directory." 1>&2
+    exit 1
+fi
+
+# Return absolute path and exit clean.
+echo "$DIR"
+exit 0

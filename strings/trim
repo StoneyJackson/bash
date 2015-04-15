@@ -1,0 +1,88 @@
+#!/bin/bash
+
+# Print usage if there are no arguments.
+if [ $# -lt 1 ] ; then
+    cat <<END
+usage: `basename $0` rule_options [strings]
+Strips prefixes and suffixes from strings specified by rule_options.
+
+Rule Options:
+  -p pattern    Strip prefixes matching pattern from strings.
+  -s pattern    Strip suffixes matching pattern from strings.
+
+Rule options must be supplied before any strings. If no strings are
+supplied on the command line, strings are taken from standard input.
+
+For each string, the first prefix rule that matches is stripped.
+The remaining prefix rules are ignored. The same is true for suffix
+rules. If both prefix and suffix rules are given, the first matching
+of each are applied.
+
+If you want multiple prefix or suffix rules to match, pipe results
+from one instance into another like so:
+
+    `basename $0` -p p1 string | `basename $0` -p p2
+END
+    exit 1
+fi
+
+# Extracts rules from options.
+function get_rules() {
+    while getopts ":s:p:" Option ; do
+        case $Option in
+          s) echo "s$OPTARG" ;;
+          p) echo "p$OPTARG" ;;
+        esac
+    done
+    exit $OPTIND
+}
+
+# Applies rules ($2+) to the string in $1.
+function apply_rules() {
+    local string="$1"
+    local temp=
+    local prefix_done=
+    local suffix_done=
+    shift
+    for rule in $@ ; do
+        case "$rule" in
+        s*)
+            if [ -z "$suffix_done" ] ; then
+                rule="${rule#s}"
+                temp="${string%$rule}"
+                if [ "$temp" != "$string" ] ; then
+                    suffix_done="yes"
+                fi
+                string="$temp"
+            fi
+        ;;
+        p*)
+            if [ -z "$prefix_done" ] ; then
+                rule="${rule#p}"
+                temp="${string#$rule}"
+                if [ "$temp" != "$string" ] ; then
+                    prefix_done="yes"
+                fi
+                string="$temp"
+            fi
+        ;;
+        esac
+    done
+    echo "$string"
+}
+
+S=`get_rules $@`
+shift $(($? - 1))
+
+if [ $# -lt 1 ] ; then
+    # Process strings from stdin.
+    while read i ; do
+        apply_rules "$i" "$S"
+    done
+else
+    # Process strings from command line.
+    for i in $@ ; do
+        apply_rules "$i" "$S"
+    done
+fi
+exit 0

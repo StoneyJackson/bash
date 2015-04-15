@@ -1,0 +1,180 @@
+#!/bin/bash
+
+# Stop execution if any error is encountered.
+set -e
+# Using an unset variable is an error.
+set -u
+
+# extract start_directory
+#
+# Recursively extracts all compressed files in the given start_directory all
+# subdirectories recursively of start_directory.
+#
+# That "recursively" appears twice is not a mistake. The first "recursively"
+# means that each compressed file and any compressed files within them are
+# extracted. The second "recursively" refers to the process of searching for
+# files to extract.
+
+
+################################################################################
+# _check_dependencies
+#
+# Ensures that the commands that this script is dependent on are avialable.
+# For each command that isn't available, an error message is reported to
+# stderr. If any command is not available, 1 is returned; otherwise 0.
+function _check_dependencies {
+  local commands=(unzip unrar tar bunzip2 gunzip 7z)
+  local errors=0
+  for i in "${commands[@]}" ; do
+    type -P "$i" &> /dev/null 
+    if [ $? -ne 0 ] ; then
+      echo "$i is not available" >&2
+      errors=1
+    fi
+  done
+  return $errors
+}
+export -f _check_dependencies
+
+
+################################################################################
+# _extract compressed_file backup_dir
+#
+# Extracts compressed_file into a directory by the same name, minus its
+# extension. compressed_file is then moved into backup_dir. Creates backup_dir
+# if it does not exist. compressed_file and backup_dir must be in the current
+# directory.
+
+function _extract {
+  if [ -z "$1" -o -z "$2" ] ; then
+    echo "usage: _extract compressed_file backup_dir" >&2
+    return 1
+  fi
+  case "$1" in
+    *.zip)      unzip "$1" -d "${1%.zip}"               ;;
+    *.rar)      unrar x "$1" "${1%.rar}/"               ;;
+    *.tar.gz)   tar -zxvf "$1" -C "${1%.tar.gz}"        ;;
+    *.tgz)      tar -zxvf "$1" -C "${1%.tgz}"           ;;
+    *.tar.bz)   tar -jxvf "$1" -C "${1%.tar.bz}"        ;;
+    *.tar.bz2)  tar -jxvf "$1" -C "${1%.tar.bz2}"       ;;
+    *.tbz2)     tar -jxvf "$1" -C "${1%.tbz2}"          ;;
+    *.tbz)      tar -jxvf "$1" -C "${1%.tbz}"           ;;
+    *.7z)       7z x "$1" -o"${1%.7z}"                  ;;
+    *)          echo "Unrecognized file type: $1" 1>&2  ;;
+  esac
+  mkdir -p "$2"
+  mv "$1" "$2"
+}
+export -f _extract
+
+
+################################################################################
+# _find_and_extract(start_directory, backup_dir)
+#
+# Recursively finds and extracts compressed files starting in start_directory.
+# Directories named by backup_dir are skipped by the search, and are created to
+# store backups of the compressed files. Prints to stdout the output produced
+# by extraction. Errors are suppressed.
+function _find_and_extract {
+
+  # validate input
+  if [ ! -d "$1" -o -z "$2" ] ; then
+    echo "_find_and_extract: invalid input" >&2
+    echo "_find_and_extract: 1 - '$1'" >&2
+    echo "_find_and_extract: 2 - '$2'" >&2
+    return 1
+  fi
+
+  # skipping directories named $2
+  # for each file that ends in a common compressed file extensions
+  #     extract the file
+  find "$1" \
+    -type d -name "$2" -prune -o \
+    -type f \( \
+        -name "*.zip" -o \
+        -name "*.rar" -o \
+        -name "*.tar.gz" -o \
+        -name "*.tgz" -o \
+        -name "*.tar.bz" -o \
+        -name "*.tar.bz2" -o \
+        -name "*.tbz2" -o \
+        -name "*.tbz" -o \
+        -name "*.7z" \
+    \) \
+    -execdir /bin/bash -c "_extract '{}' '$2'" \; 2>/dev/null
+}
+export -f _find_and_extract
+
+
+################################################################################
+# _undo_extract(directory, backup_dir)
+#
+# Restores compressed files in directory/backup_dir to directory, and deletes
+# directories in directory/ that were generated from decompressing those files.
+function _undo_extract {
+
+  # validate input
+  if [ ! -d "$1" ] || [ ! -d "$2" ] ; then
+    echo "_undo_extract: invalid input" >&2
+    echo "_undo_extract: 1 - '$1'" >&2
+    echo "_undo_extract: 2 - '$2'" >&2
+    return 1
+  fi
+
+  # Exit if any command fails
+  set -e
+
+  # Move into $1
+  pushd "$1" &> /dev/null
+
+  # For each file in $1/$2, delete the corresponding directory in $1/
+  # and move the file to $1/.
+  for i in "$2"/* ; do
+    i="$(basename "$i")"
+    for j in * ; do
+      if [[ "$i" == $j.* ]] ; then
+        rm -r "$j"
+      fi
+    done
+    mv "$2/$i" "."
+  done
+  # Delete the backup directory.
+  rm -r "$2"
+  popd &> /dev/null
+}
+export -f _undo_extract
+
+################################################################################
+# MAIN
+
+_check_dependencies || exit 1
+
+# Extract command line options.
+operation="extract"
+if [ "$1" == "-u" ] ; then
+  operation="undo"
+  shift
+fi
+
+# Define key variables.
+script_name="$(basename "$0")"
+backup_dirname=".$script_name"
+
+# The first argument must be the name of a directory.
+if [ -z "${1:+unset}" ] || [ ! -d "$1" ] ; then
+  echo usage: "$script_name" directory >&2
+  exit 1
+fi
+
+case $operation in
+extract)
+  # Keep extracting compressed files until there are no more.
+  while [ -n "$(_find_and_extract "$1" "$backup_dirname")" ] ; do
+    : # no-op
+  done
+;;
+undo)
+  _undo_extract "$1" "$backup_dirname"
+;;
+esac
+

@@ -1,0 +1,64 @@
+#!/bin/bash
+
+# Stoney Jackson
+# COMMAND: unxip [dir]
+# DESCRIPTION: Recursively extracts all zip files in dir. Zipped files are
+# moved into a folder named xips.
+# DEPENDS: unx
+
+
+# FUNCTION: ux file
+# Extracts file and moves file to xips folder.
+#
+# FUNCTION: ux
+# Extracts all archives, creates xips folder, moves archives into xips.
+ux()
+{
+    if [ -f "$1" ] ; then
+        unx "$1"
+        mkdir -p xips
+        mv "$1" xips
+    else
+        find . -path "*/xips" -prune -o \
+            \( -name "*.zip" -o -name "*.rar" -o -name "*.tar.gz" \
+            -o -name "*.tgz" -o -name "*.7z" \) -execdir unx "{}" \; \
+                -execdir mkdir -p "xips" \; \
+                -execdir mv "{}" "xips" \;
+    fi
+}
+
+
+remext()
+{
+    if [ "$1" != "${1%.zip}" ] ; then
+        echo "${1%.zip}"
+    elif [ "$1" != "${1%.rar}" ] ; then
+        echo "${1%.rar}"
+    elif [ "$1" != "${1%.tgz}" ] ; then
+        echo "${1%.tgz}"
+    elif [ "$1" != "${1%.tar.gz}" ] ; then
+        echo "${1%.tar.gz}"
+    fi
+}
+
+
+if [ -d "$1" ] ; then
+    # A directory was given, move into it.
+    pushd "$1" > /dev/null || exit 1
+elif [ -f "$1" ] ; then
+    # A file was specified, extract it and move into extracted folder.
+    RES=$(ux "$1")
+    DIR=$(remext "$1")
+    pushd "$DIR" > /dev/null || exit 1
+fi
+
+# Extract until there is nothing else to extract.
+RES=$(ux)
+while [ -n "$RES" ] ; do
+    RES=$(ux)
+done
+
+# Return to original directory.
+if [ -n "$1" ] ; then
+    popd > /dev/null
+fi

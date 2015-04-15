@@ -1,0 +1,24 @@
+#!/bin/bash
+
+
+####
+print_usage()
+{
+    echo "Strips base from absolute filename."
+    echo "Usage: `basename \"$0\"` absolute base"
+}
+
+if [ $# -lt 2 ] ; then
+    print_usage
+    exit 0
+fi
+
+###
+
+ABS="$1"
+BASE="$2"
+
+S=`strip_prefix "$ABS" "$BASE"`
+S=`strip_prefix "$S" /`
+S=`strip_suffix "$S" /`
+echo "$S"
